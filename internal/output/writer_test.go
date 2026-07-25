@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gerui/htseq2matrix-go/pkg/dataframe"
+	"github.com/rainoffallingstar/seq2mat/pkg/dataframe"
 )
 
 func TestWriteMatricesPublishesBothMatrices(t *testing.T) {

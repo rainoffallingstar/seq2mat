@@ -25,10 +25,10 @@ type GeneMappingProvider interface {
 
 // CSVDatabase implements GeneDatabase using CSV files (no CGO required)
 type CSVDatabase struct {
-	humanMap   map[string][]string
-	mouseMap   map[string][]string
+	humanMap    map[string][]string
+	mouseMap    map[string][]string
 	sourcePaths map[string]string
-	mu         sync.RWMutex
+	mu          sync.RWMutex
 }
 
 // NewCSVDatabase creates a new CSV-based database instance

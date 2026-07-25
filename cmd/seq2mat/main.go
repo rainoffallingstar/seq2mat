@@ -7,10 +7,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/gerui/htseq2matrix-go/internal/database"
-	"github.com/gerui/htseq2matrix-go/internal/htseq"
-	"github.com/gerui/htseq2matrix-go/internal/output"
-	"github.com/gerui/htseq2matrix-go/internal/processor"
+	"github.com/rainoffallingstar/seq2mat/internal/database"
+	"github.com/rainoffallingstar/seq2mat/internal/htseq"
+	"github.com/rainoffallingstar/seq2mat/internal/output"
+	"github.com/rainoffallingstar/seq2mat/internal/processor"
 )
 
 var (
@@ -24,10 +24,14 @@ var (
 var Version = "0.1.0"
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage: seq2mat [options]\n\nOptions:\n")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 
 	if *showVer {
-		fmt.Printf("htseq2matrix %s\n", Version)
+		fmt.Printf("seq2mat %s\n", Version)
 		return
 	}
 
@@ -138,22 +142,22 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to build mapping manifest: %w", err)
 	}
-	matrixManifest := map[string]any{
-		"schema_version": "htseq2matrix.matrix/1.0.0",
-		"generator_version": Version,
-		"species": species,
-		"input_directory": *htseqDir,
-		"postfix": *postfix,
-		"sample_count": len(samples),
-		"row_count": df.NumRows,
-		"gene_universe": "union",
-		"missing_value_policy": "zero",
-		"unmapped_id_policy": "retain",
-		"one_to_many_policy": string(processor.OneToManyExpand),
-		"duplicate_symbol_policy": "column_max",
-		"row_order": "symbol_ascending",
-		"mapping": mappingManifest,
-		"conversion": conversionStatistics,
+	matrixManifest := MatrixManifest{
+		SchemaVersion:         MatrixSchemaVersion,
+		GeneratorVersion:      Version,
+		Species:               species,
+		InputDirectory:        *htseqDir,
+		Postfix:               *postfix,
+		SampleCount:           len(samples),
+		RowCount:              df.NumRows,
+		GeneUniverse:          "union",
+		MissingValuePolicy:    "zero",
+		UnmappedIDPolicy:      "retain",
+		OneToManyPolicy:       string(processor.OneToManyExpand),
+		DuplicateSymbolPolicy: "column_max",
+		RowOrder:              "symbol_ascending",
+		Mapping:               mappingManifest,
+		Conversion:            conversionStatistics,
 	}
 
 	if err := output.WriteMatricesWithManifest(df, normalized, *outputDir, matrixManifest); err != nil {

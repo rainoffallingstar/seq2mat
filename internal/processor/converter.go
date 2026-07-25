@@ -3,8 +3,8 @@ package processor
 import (
 	"fmt"
 
-	"github.com/gerui/htseq2matrix-go/internal/database"
-	"github.com/gerui/htseq2matrix-go/pkg/dataframe"
+	"github.com/rainoffallingstar/seq2mat/internal/database"
+	"github.com/rainoffallingstar/seq2mat/pkg/dataframe"
 )
 
 const HighUnmappedRateThreshold = 0.20

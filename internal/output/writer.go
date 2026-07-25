@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/gerui/htseq2matrix-go/pkg/dataframe"
+	"github.com/rainoffallingstar/seq2mat/pkg/dataframe"
 )
 
 const (

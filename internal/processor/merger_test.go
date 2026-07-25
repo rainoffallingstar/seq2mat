@@ -3,7 +3,7 @@ package processor
 import (
 	"testing"
 
-	"github.com/gerui/htseq2matrix-go/internal/htseq"
+	"github.com/rainoffallingstar/seq2mat/internal/htseq"
 )
 
 func TestMergeSamplesFillsMissingGenesWithZero(t *testing.T) {

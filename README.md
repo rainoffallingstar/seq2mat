@@ -1,4 +1,4 @@
-# htseq2matrix-go
+# seq2mat
 
 Go实现的高性能HTSeq表达矩阵转换工具，将HTSeq输出文件转换为基因表达矩阵。
 
@@ -17,22 +17,22 @@ Go实现的高性能HTSeq表达矩阵转换工具，将HTSeq输出文件转换�
 
 ```bash
 # 人类数据
-htseq2matrix --htseq_dir /path/to/htseq --output_dir /path/to/output
+seq2mat --htseq_dir /path/to/htseq --output_dir /path/to/output
 
 # 小鼠数据
-htseq2matrix --htseq_dir /path/to/htseq --postfix "_mouse.txt" --output_dir /path/to/output
+seq2mat --htseq_dir /path/to/htseq --postfix "_mouse.txt" --output_dir /path/to/output
 ```
 
 ### 从源码构建
 
 ```bash
 # 1. 准备CSV基因映射文件（仅需首次）
-cp /path/to/htseq2matrix/data/*.rda data/
+cp /path/to/seq2mat/data/*.rda data/
 Rscript convert_rda_to_csv.R
 cp data/gene_mapping_*.csv internal/database/
 
 # 2. 编译（数据库将自动嵌入）
-go build -o htseq2matrix cmd/htseq2matrix/main.go
+go build -o seq2mat ./cmd/seq2mat
 ```
 
 ## 命令行参数
@@ -47,8 +47,12 @@ go build -o htseq2matrix cmd/htseq2matrix/main.go
 
 - `matrix_count.txt` - 原始计数矩阵
 - `matrix_norm.txt` - log2标准化矩阵 (log2(x+1))
+- `matrix_manifest.json` - 矩阵生成参数、基因映射来源和转换统计
 
-均为TSV格式，首列为基因符号，其余列为样本。
+两个矩阵文件均为TSV格式，首列为基因符号，其余列为样本。manifest 使用 seq2mat
+自有 schema：顶层为 `seq2mat.matrix/1.0.0`，其中 `mapping` 字段为
+`seq2mat.mapping/1.0.0`。这些标识不是外部 HTSeq 标准；HTSeq 在本文中仅指输入格式。
+旧产品 schema 不再生成，也不提供兼容路径。
 
 ## 数据处理流程
 
@@ -63,16 +67,16 @@ go build -o htseq2matrix cmd/htseq2matrix/main.go
 
 ```bash
 # Linux
-GOOS=linux GOARCH=amd64 go build -o htseq2matrix-linux cmd/htseq2matrix/main.go
+GOOS=linux GOARCH=amd64 go build -o seq2mat-linux ./cmd/seq2mat
 
 # Windows
-GOOS=windows GOARCH=amd64 go build -o htseq2matrix.exe cmd/htseq2matrix/main.go
+GOOS=windows GOARCH=amd64 go build -o seq2mat.exe ./cmd/seq2mat
 
 # macOS Intel
-GOOS=darwin GOARCH=amd64 go build -o htseq2matrix-mac-intel cmd/htseq2matrix/main.go
+GOOS=darwin GOARCH=amd64 go build -o seq2mat-mac-intel ./cmd/seq2mat
 
 # macOS Apple Silicon
-GOOS=darwin GOARCH=arm64 go build -o htseq2matrix-mac-arm64 cmd/htseq2matrix/main.go
+GOOS=darwin GOARCH=arm64 go build -o seq2mat-mac-arm64 ./cmd/seq2mat
 ```
 
 ## 数据库模式
@@ -101,8 +105,8 @@ data/
 ## 项目结构
 
 ```
-htseq2matrix-go/
-├── cmd/htseq2matrix/main.go       # 入口
+seq2mat/
+├── cmd/seq2mat/main.go       # 入口
 ├── internal/
 │   ├── htseq/                    # HTSeq文件读取
 │   ├── processor/                 # 数据处理流程

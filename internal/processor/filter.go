@@ -3,7 +3,7 @@ package processor
 import (
 	"fmt"
 
-	"github.com/gerui/htseq2matrix-go/pkg/dataframe"
+	"github.com/rainoffallingstar/seq2mat/pkg/dataframe"
 )
 
 // FilterInvalidRows removes rows with zero, -Inf, or NA sums

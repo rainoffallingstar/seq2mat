@@ -32,6 +32,9 @@ func TestCSVDatabasePreservesDistinctOneToManyMappingsAndSkipsNA(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if manifest.SchemaVersion != MappingSchemaVersion {
+		t.Fatalf("mapping schema version = %q, want %q", manifest.SchemaVersion, MappingSchemaVersion)
+	}
 	if manifest.AssociationCount != 2 || manifest.AmbiguousIDCount != 1 || manifest.SourceSHA256 == "" {
 		t.Fatalf("unexpected manifest: %+v", manifest)
 	}

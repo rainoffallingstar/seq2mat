@@ -1,3 +1,3 @@
-module github.com/gerui/htseq2matrix-go
+module github.com/rainoffallingstar/seq2mat
 
 go 1.21

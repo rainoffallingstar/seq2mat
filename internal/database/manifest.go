@@ -8,15 +8,17 @@ import (
 	"sort"
 )
 
+const MappingSchemaVersion = "seq2mat.mapping/1.0.0"
+
 // MappingManifest describes the exact mapping table loaded by a run.
 type MappingManifest struct {
-	SchemaVersion    string `json:"schema_version"`
-	Species          string `json:"species"`
-	Source           string `json:"source"`
-	SourceSHA256     string `json:"source_sha256,omitempty"`
-	InputIDCount     int    `json:"input_id_count"`
-	AssociationCount int    `json:"association_count"`
-	AmbiguousIDCount int    `json:"ambiguous_id_count"`
+	SchemaVersion    string   `json:"schema_version"`
+	Species          string   `json:"species"`
+	Source           string   `json:"source"`
+	SourceSHA256     string   `json:"source_sha256,omitempty"`
+	InputIDCount     int      `json:"input_id_count"`
+	AssociationCount int      `json:"association_count"`
+	AmbiguousIDCount int      `json:"ambiguous_id_count"`
 	NamespaceSamples []string `json:"namespace_samples,omitempty"`
 }
 
@@ -43,7 +45,7 @@ func buildMappingManifest(species, source string, mappings map[string][]string, 
 	}
 	checksum := sha256.Sum256(sourceBytes)
 	return MappingManifest{
-		SchemaVersion:    "htseq2matrix.mapping/1.0.0",
+		SchemaVersion:    MappingSchemaVersion,
 		Species:          species,
 		Source:           source,
 		SourceSHA256:     hex.EncodeToString(checksum[:]),

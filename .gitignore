@@ -1,7 +1,7 @@
 # Binaries
-/htseq2matrix
-/htseq2matrix.exe
-htseq2matrix-*
+/seq2mat
+/seq2mat.exe
+seq2mat-*
 *.exe
 *.dll
 *.so

@@ -1,7 +1,7 @@
 package processor
 
 import (
-	"github.com/gerui/htseq2matrix-go/pkg/dataframe"
+	"github.com/rainoffallingstar/seq2mat/pkg/dataframe"
 )
 
 // AggregateDuplicates aggregates duplicate gene symbols by taking max value

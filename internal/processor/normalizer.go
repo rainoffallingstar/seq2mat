@@ -1,7 +1,7 @@
 package processor
 
 import (
-	"github.com/gerui/htseq2matrix-go/pkg/dataframe"
+	"github.com/rainoffallingstar/seq2mat/pkg/dataframe"
 )
 
 // Normalize applies log2(x+1) transformation

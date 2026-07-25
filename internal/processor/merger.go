@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/gerui/htseq2matrix-go/internal/htseq"
-	"github.com/gerui/htseq2matrix-go/pkg/dataframe"
+	"github.com/rainoffallingstar/seq2mat/internal/htseq"
+	"github.com/rainoffallingstar/seq2mat/pkg/dataframe"
 )
 
 // MergeSamples merges multiple HTSeq samples into a single DataFrame
