@@ -52,7 +52,7 @@ func MergeSamples(samples []htseq.HTSeqSample) (*dataframe.DataFrame, error) {
 		values := make([]float64, len(samples))
 		for sampleIndex, countMap := range sampleCountMaps {
 			if count, ok := countMap[geneID]; ok {
-				values[sampleIndex] = count
+				values[sampleIndex] = count.Float64()
 			} else {
 				values[sampleIndex] = 0
 			}

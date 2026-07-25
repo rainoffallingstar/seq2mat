@@ -112,30 +112,52 @@ func run() error {
 		return fmt.Errorf("failed to merge samples: %w", err)
 	}
 
-	// Convert gene IDs to symbols while retaining IDs missing from the mapping.
+	// Convert with an explicit contract: preserve every one-to-many association and retain unmapped IDs.
 	var conversionStatistics processor.GeneIDConversionStats
-	df, conversionStatistics, err = processor.ConvertGeneIDs(df, geneDB, species)
+	df, conversionStatistics, err = processor.ConvertGeneIDsWithOptions(
+		df,
+		geneDB,
+		species,
+		processor.ConversionOptions{OneToMany: processor.OneToManyExpand, RetainUnmapped: true},
+	)
 	if err != nil {
 		return fmt.Errorf("failed to convert gene IDs: %w", err)
 	}
 
-	// Aggregate duplicates (multiple gene IDs mapping to same symbol)
+	// Aggregate duplicates (multiple gene IDs mapping to the same symbol), then sort by output symbol.
 	df = processor.AggregateDuplicates(df)
-
-	// Filter invalid rows (zero/NA/-Inf sums)
 	df = processor.FilterInvalidRows(df)
+	df.SortRows()
 
-	// Write count matrix
-	if err := output.WriteCountMatrix(df, *outputDir); err != nil {
-		return fmt.Errorf("failed to write count matrix: %w", err)
+	normalized := processor.Normalize(df)
+	mappingManifestProvider, ok := geneDB.(database.ManifestProvider)
+	if !ok {
+		return fmt.Errorf("selected gene database does not expose mapping provenance")
+	}
+	mappingManifest, err := mappingManifestProvider.MappingManifest(species)
+	if err != nil {
+		return fmt.Errorf("failed to build mapping manifest: %w", err)
+	}
+	matrixManifest := map[string]any{
+		"schema_version": "htseq2matrix.matrix/1.0.0",
+		"generator_version": Version,
+		"species": species,
+		"input_directory": *htseqDir,
+		"postfix": *postfix,
+		"sample_count": len(samples),
+		"row_count": df.NumRows,
+		"gene_universe": "union",
+		"missing_value_policy": "zero",
+		"unmapped_id_policy": "retain",
+		"one_to_many_policy": string(processor.OneToManyExpand),
+		"duplicate_symbol_policy": "column_max",
+		"row_order": "symbol_ascending",
+		"mapping": mappingManifest,
+		"conversion": conversionStatistics,
 	}
 
-	// Normalize
-	normalized := processor.Normalize(df)
-
-	// Write normalized matrix
-	if err := output.WriteNormalizedMatrix(normalized, *outputDir); err != nil {
-		return fmt.Errorf("failed to write normalized matrix: %w", err)
+	if err := output.WriteMatricesWithManifest(df, normalized, *outputDir, matrixManifest); err != nil {
+		return fmt.Errorf("failed to publish output matrices: %w", err)
 	}
 
 	fmt.Printf("\nSuccessfully processed %d samples\n", len(samples))

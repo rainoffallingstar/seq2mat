@@ -15,8 +15,8 @@ var csvFiles embed.FS
 // EmbeddedDatabase implements GeneDatabase using embedded CSV files
 // This allows the gene database to be embedded directly in the binary
 type EmbeddedDatabase struct {
-	humanMap map[string]string
-	mouseMap map[string]string
+	humanMap map[string][]string
+	mouseMap map[string][]string
 	mu       sync.RWMutex
 	loaded   bool
 }
@@ -24,8 +24,8 @@ type EmbeddedDatabase struct {
 // NewEmbeddedDatabase creates a new embedded database instance
 func NewEmbeddedDatabase() *EmbeddedDatabase {
 	return &EmbeddedDatabase{
-		humanMap: make(map[string]string),
-		mouseMap: make(map[string]string),
+		humanMap: make(map[string][]string),
+		mouseMap: make(map[string][]string),
 	}
 }
 
@@ -44,7 +44,7 @@ func (e *EmbeddedDatabase) LoadSpecies(_, species string) error {
 
 	// Determine which file to load
 	var filename string
-	var targetMap map[string]string
+	var targetMap map[string][]string
 	if species == "human" {
 		filename = "gene_mapping_human.csv"
 		targetMap = e.humanMap
@@ -81,42 +81,51 @@ func (e *EmbeddedDatabase) LoadSpecies(_, species string) error {
 		if len(record) < 2 {
 			continue
 		}
-		geneID := record[0]
-		symbol := record[1]
-		targetMap[geneID] = symbol
+		geneID := strings.TrimSpace(record[0])
+		symbol := strings.TrimSpace(record[1])
+		if geneID == "" || symbol == "" || strings.EqualFold(geneID, "NA") || strings.EqualFold(symbol, "NA") {
+			continue
+		}
+		targetMap[geneID] = appendUniqueSymbol(targetMap[geneID], symbol)
 	}
 
 	e.loaded = true
 	return nil
 }
 
-// GetSymbol returns the gene symbol for a gene ID
+// GetSymbol returns the first symbol for compatibility.
 func (e *EmbeddedDatabase) GetSymbol(geneID string) (string, bool) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	// Try human map first
-	if symbol, ok := e.humanMap[geneID]; ok {
-		return symbol, true
+	symbols := e.GetSymbolsBySpecies(geneID, "human")
+	if len(symbols) == 0 {
+		symbols = e.GetSymbolsBySpecies(geneID, "mouse")
 	}
-	// Try mouse map
-	if symbol, ok := e.mouseMap[geneID]; ok {
-		return symbol, true
+	if len(symbols) == 0 {
+		return "", false
 	}
-	return "", false
+	return symbols[0], true
 }
 
-// GetSymbolBySpecies returns the gene symbol for a gene ID in a specific species
+// GetSymbolBySpecies returns the first symbol for compatibility.
 func (e *EmbeddedDatabase) GetSymbolBySpecies(geneID, species string) (string, bool) {
+	symbols := e.GetSymbolsBySpecies(geneID, species)
+	if len(symbols) == 0 {
+		return "", false
+	}
+	return symbols[0], true
+}
+
+// GetSymbolsBySpecies returns all distinct symbols in source order.
+func (e *EmbeddedDatabase) GetSymbolsBySpecies(geneID, species string) []string {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
+	var symbols []string
 	if species == "human" {
-		symbol, ok := e.humanMap[geneID]
-		return symbol, ok
+		symbols = e.humanMap[geneID]
+	} else {
+		symbols = e.mouseMap[geneID]
 	}
-	symbol, ok := e.mouseMap[geneID]
-	return symbol, ok
+	return append([]string(nil), symbols...)
 }
 
 // Close closes the database connection (no-op for embedded)

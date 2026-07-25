@@ -17,18 +17,25 @@ type GeneDatabase interface {
 	Close() error
 }
 
+// GeneMappingProvider exposes every symbol associated with an input ID.
+// Implementations must preserve source order so expansion remains deterministic.
+type GeneMappingProvider interface {
+	GetSymbolsBySpecies(geneID, species string) []string
+}
+
 // CSVDatabase implements GeneDatabase using CSV files (no CGO required)
 type CSVDatabase struct {
-	humanMap map[string]string
-	mouseMap map[string]string
-	mu       sync.RWMutex
+	humanMap   map[string][]string
+	mouseMap   map[string][]string
+	sourcePaths map[string]string
+	mu         sync.RWMutex
 }
 
 // NewCSVDatabase creates a new CSV-based database instance
 func NewCSVDatabase() *CSVDatabase {
 	return &CSVDatabase{
-		humanMap: make(map[string]string),
-		mouseMap: make(map[string]string),
+		humanMap: make(map[string][]string),
+		mouseMap: make(map[string][]string),
 	}
 }
 
@@ -49,7 +56,7 @@ func (c *CSVDatabase) LoadSpecies(dbPath, species string) error {
 
 	// Determine which file to load
 	var filename string
-	var targetMap map[string]string
+	var targetMap map[string][]string
 	if species == "human" {
 		filename = "gene_mapping_human.csv"
 		targetMap = c.humanMap
@@ -59,6 +66,10 @@ func (c *CSVDatabase) LoadSpecies(dbPath, species string) error {
 	}
 
 	filePath := filepath.Join(dbPath, filename)
+	if c.sourcePaths == nil {
+		c.sourcePaths = make(map[string]string)
+	}
+	c.sourcePaths[species] = filePath
 
 	// Open CSV file
 	file, err := os.Open(filePath)
@@ -91,42 +102,60 @@ func (c *CSVDatabase) LoadSpecies(dbPath, species string) error {
 			}
 		}
 
-		geneID := record[0]
-		symbol := record[1]
-		targetMap[geneID] = symbol
+		geneID := strings.TrimSpace(record[0])
+		symbol := strings.TrimSpace(record[1])
+		if geneID == "" || symbol == "" || strings.EqualFold(geneID, "NA") || strings.EqualFold(symbol, "NA") {
+			continue
+		}
+		targetMap[geneID] = appendUniqueSymbol(targetMap[geneID], symbol)
 	}
 
 	return nil
 }
 
-// GetSymbol returns the gene symbol for a gene ID
-// Returns (symbol, true) if found, ("", false) if not found
+func appendUniqueSymbol(symbols []string, symbol string) []string {
+	for _, existingSymbol := range symbols {
+		if existingSymbol == symbol {
+			return symbols
+		}
+	}
+	return append(symbols, symbol)
+}
+
+// GetSymbol returns the first symbol for a gene ID for compatibility.
 func (c *CSVDatabase) GetSymbol(geneID string) (string, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	// Try human map first
-	if symbol, ok := c.humanMap[geneID]; ok {
-		return symbol, true
-	}
-	// Try mouse map
-	if symbol, ok := c.mouseMap[geneID]; ok {
-		return symbol, true
+	for _, mapping := range []map[string][]string{c.humanMap, c.mouseMap} {
+		if symbols, ok := mapping[geneID]; ok && len(symbols) > 0 {
+			return symbols[0], true
+		}
 	}
 	return "", false
 }
 
-// GetSymbolBySpecies returns the gene symbol for a gene ID in a specific species
+// GetSymbolBySpecies returns the first symbol for compatibility.
 func (c *CSVDatabase) GetSymbolBySpecies(geneID, species string) (string, bool) {
+	symbols := c.GetSymbolsBySpecies(geneID, species)
+	if len(symbols) == 0 {
+		return "", false
+	}
+	return symbols[0], true
+}
+
+// GetSymbolsBySpecies returns all distinct symbols in source order.
+func (c *CSVDatabase) GetSymbolsBySpecies(geneID, species string) []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	var symbols []string
 	if species == "human" {
-		symbol, ok := c.humanMap[geneID]
-		return symbol, ok
+		symbols = c.humanMap[geneID]
+	} else {
+		symbols = c.mouseMap[geneID]
 	}
-	symbol, ok := c.mouseMap[geneID]
-	return symbol, ok
+	return append([]string(nil), symbols...)
 }
 
 // Close closes the database connection (no-op for CSV)

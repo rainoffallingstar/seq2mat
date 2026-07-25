@@ -58,8 +58,10 @@ func readHTSeqFile(filePath, postfix, htseqDir string) (HTSeqSample, error) {
 	scanner.Buffer(buf, 1024*1024)
 
 	seenGeneIDs := make(map[string]struct{})
+	lineNumber := 0
 
 	for scanner.Scan() {
+		lineNumber++
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
@@ -77,22 +79,22 @@ func readHTSeqFile(filePath, postfix, htseqDir string) (HTSeqSample, error) {
 
 		parts := strings.Split(line, "\t")
 		if len(parts) != 2 {
-			return HTSeqSample{}, fmt.Errorf("invalid line format (expected 2 columns): %s", line)
+			return HTSeqSample{}, fmt.Errorf("line %d: invalid line format (expected 2 columns): %s", lineNumber, line)
 		}
 
 		geneID := strings.TrimSpace(parts[0])
-		countStr := strings.TrimSpace(parts[1])
+		countText := strings.TrimSpace(parts[1])
 		if geneID == "" {
-			return HTSeqSample{}, fmt.Errorf("empty gene ID in line: %s", line)
+			return HTSeqSample{}, fmt.Errorf("line %d: empty gene ID", lineNumber)
 		}
 		if _, exists := seenGeneIDs[geneID]; exists {
-			return HTSeqSample{}, fmt.Errorf("duplicate gene ID %q", geneID)
+			return HTSeqSample{}, fmt.Errorf("line %d: duplicate gene ID %q", lineNumber, geneID)
 		}
 		seenGeneIDs[geneID] = struct{}{}
 
-		count, err := strconv.ParseFloat(countStr, 64)
+		count, err := parseCount(countText)
 		if err != nil {
-			return HTSeqSample{}, fmt.Errorf("invalid count value '%s': %w", countStr, err)
+			return HTSeqSample{}, fmt.Errorf("line %d: invalid count value %q: %w", lineNumber, countText, err)
 		}
 
 		records = append(records, HTSeqRecord{
@@ -110,6 +112,28 @@ func readHTSeqFile(filePath, postfix, htseqDir string) (HTSeqSample, error) {
 		Records:  records,
 		Path:     filePath,
 	}, nil
+}
+
+func parseCount(countText string) (Count, error) {
+	if countText == "" {
+		return 0, fmt.Errorf("count is empty")
+	}
+	for characterIndex := 0; characterIndex < len(countText); characterIndex++ {
+		character := countText[characterIndex]
+		if character < '0' || character > '9' {
+			return 0, fmt.Errorf("count must contain decimal digits only")
+		}
+	}
+
+	parsedCount, err := strconv.ParseUint(countText, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("count overflows uint64: %w", err)
+	}
+	if parsedCount > uint64(MaxExactDataFrameCount) {
+		return 0, fmt.Errorf("count %d exceeds maximum exact dataframe count %d", parsedCount, MaxExactDataFrameCount)
+	}
+
+	return Count(parsedCount), nil
 }
 
 // ToCountMap converts HTSeqSample records to a map for efficient merging

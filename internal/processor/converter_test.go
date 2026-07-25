@@ -8,7 +8,8 @@ import (
 )
 
 type testGeneDatabase struct {
-	mapping map[string]string
+	mapping      map[string]string
+	multiMapping map[string][]string
 }
 
 func (database *testGeneDatabase) GetSymbol(geneID string) (string, bool) {
@@ -19,6 +20,16 @@ func (database *testGeneDatabase) GetSymbol(geneID string) (string, bool) {
 func (database *testGeneDatabase) GetSymbolBySpecies(geneID, species string) (string, bool) {
 	symbol, found := database.mapping[geneID]
 	return symbol, found
+}
+
+func (database *testGeneDatabase) GetSymbolsBySpecies(geneID, species string) []string {
+	if symbols, found := database.multiMapping[geneID]; found {
+		return append([]string(nil), symbols...)
+	}
+	if symbol, found := database.mapping[geneID]; found {
+		return []string{symbol}
+	}
+	return nil
 }
 
 func (database *testGeneDatabase) Close() error {
@@ -79,6 +90,39 @@ func TestConvertGeneIDsPreservesMouseEnsemblIDsWhenEmbeddedMappingUsesDifferentN
 	}
 	if statistics.UnmappedCount != 1 || statistics.UnmappedRate != 1 || !statistics.HighUnmappedRate {
 		t.Fatalf("unexpected conversion statistics: %+v", statistics)
+	}
+}
+
+func TestConvertGeneIDsExpandsOneToManyMappingsDeterministically(t *testing.T) {
+	dataFrame := dataframe.NewDataFrame([]string{"Gene", "sample"})
+	dataFrame.AddRow("ENSG_MULTI", []float64{12})
+	geneDatabase := &testGeneDatabase{multiMapping: map[string][]string{"ENSG_MULTI": {"SYMBOL_A", "SYMBOL_B"}}}
+
+	converted, statistics, err := ConvertGeneIDsWithOptions(dataFrame, geneDatabase, "human", ConversionOptions{
+		OneToMany:      OneToManyExpand,
+		RetainUnmapped: true,
+	})
+	if err != nil {
+		t.Fatalf("expanded conversion returned an unexpected error: %v", err)
+	}
+	if converted.NumRows != 2 || converted.RowLabels[0] != "SYMBOL_A" || converted.RowLabels[1] != "SYMBOL_B" {
+		t.Fatalf("expanded rows = %v, want [SYMBOL_A SYMBOL_B]", converted.RowLabels)
+	}
+	if statistics.ConvertedCount != 1 || statistics.UnmappedCount != 0 {
+		t.Fatalf("conversion statistics = %+v, want one converted input", statistics)
+	}
+}
+
+func TestConvertGeneIDsRejectsOneToManyMappingsWhenRequested(t *testing.T) {
+	dataFrame := dataframe.NewDataFrame([]string{"Gene", "sample"})
+	dataFrame.AddRow("ENSG_MULTI", []float64{12})
+	geneDatabase := &testGeneDatabase{multiMapping: map[string][]string{"ENSG_MULTI": {"SYMBOL_A", "SYMBOL_B"}}}
+
+	_, _, err := ConvertGeneIDsWithOptions(dataFrame, geneDatabase, "human", ConversionOptions{
+		OneToMany: OneToManyReject,
+	})
+	if err == nil {
+		t.Fatal("expected ambiguous mapping to be rejected")
 	}
 }
 

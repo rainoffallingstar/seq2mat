@@ -7,16 +7,63 @@ import (
 	"testing"
 )
 
-func TestParseHTSeqLine(t *testing.T) {
-	// Verify HTSeq format: "gene_id\tcount"
-	geneID := "ENSG00000139618"
-	count := "42.0"
-
-	if geneID != "ENSG00000139618" {
-		t.Errorf("expected ENSG00000139618, got %s", geneID)
+func TestParseCountAcceptsNonNegativeIntegers(t *testing.T) {
+	testCases := []struct {
+		name          string
+		countText     string
+		expectedCount Count
+	}{
+		{name: "zero", countText: "0", expectedCount: 0},
+		{name: "positive", countText: "42", expectedCount: 42},
+		{name: "leading zeroes", countText: "0007", expectedCount: 7},
+		{name: "maximum exact dataframe count", countText: "9007199254740992", expectedCount: MaxExactDataFrameCount},
 	}
-	if count != "42.0" {
-		t.Errorf("expected 42.0, got %s", count)
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			actualCount, err := parseCount(testCase.countText)
+			if err != nil {
+				t.Fatalf("parseCount(%q) returned an unexpected error: %v", testCase.countText, err)
+			}
+			if actualCount != testCase.expectedCount {
+				t.Fatalf("parseCount(%q) = %d, want %d", testCase.countText, actualCount, testCase.expectedCount)
+			}
+		})
+	}
+}
+
+func TestReadHTSeqFilesRejectsInvalidCounts(t *testing.T) {
+	invalidCounts := []string{
+		"-1",
+		"+1",
+		"1.0",
+		".5",
+		"NaN",
+		"Inf",
+		"+Inf",
+		"1e3",
+		"1E3",
+		"18446744073709551616",
+		"9007199254740993",
+	}
+
+	for _, invalidCount := range invalidCounts {
+		t.Run(invalidCount, func(t *testing.T) {
+			inputDirectory := t.TempDir()
+			inputPath := filepath.Join(inputDirectory, "sample_human.txt")
+			inputContents := "ENSG000001\t" + invalidCount + "\n"
+			if err := os.WriteFile(inputPath, []byte(inputContents), 0644); err != nil {
+				t.Fatalf("write HTSeq test file: %v", err)
+			}
+
+			_, err := ReadHTSeqFiles(inputDirectory, "_human.txt")
+			if err == nil {
+				t.Fatalf("ReadHTSeqFiles accepted invalid count %q", invalidCount)
+			}
+			if !strings.Contains(err.Error(), "invalid count value") {
+				t.Fatalf("error = %q, want invalid count detail", err)
+			}
+		})
 	}
 }
 
@@ -77,8 +124,8 @@ func TestToCountMap(t *testing.T) {
 	sample := HTSeqSample{
 		SampleID: "test_sample",
 		Records: []HTSeqRecord{
-			{GeneID: "BRCA1", Count: 100.5},
-			{GeneID: "TP53", Count: 50.0},
+			{GeneID: "BRCA1", Count: 100},
+			{GeneID: "TP53", Count: 50},
 		},
 	}
 
@@ -87,11 +134,11 @@ func TestToCountMap(t *testing.T) {
 	if len(countMap) != 2 {
 		t.Errorf("expected 2 entries in count map, got %d", len(countMap))
 	}
-	if countMap["BRCA1"] != 100.5 {
-		t.Errorf("expected BRCA1 count 100.5, got %f", countMap["BRCA1"])
+	if countMap["BRCA1"] != 100 {
+		t.Errorf("expected BRCA1 count 100, got %d", countMap["BRCA1"])
 	}
-	if countMap["TP53"] != 50.0 {
-		t.Errorf("expected TP53 count 50.0, got %f", countMap["TP53"])
+	if countMap["TP53"] != 50 {
+		t.Errorf("expected TP53 count 50, got %d", countMap["TP53"])
 	}
 }
 

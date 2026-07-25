@@ -1,9 +1,11 @@
 package dataframe
 
 import (
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -117,9 +119,9 @@ func TestDataFrame_FilterInvalidRows(t *testing.T) {
 
 func TestDataFrame_Normalize(t *testing.T) {
 	df := NewDataFrame([]string{"Gene", "s1"})
-	df.AddRow("gene1", []float64{0.0})   // log2(0+1) = log2(1) = 0
-	df.AddRow("gene2", []float64{1.0})   // log2(1+1) = log2(2) = 1
-	df.AddRow("gene3", []float64{3.0})   // log2(3+1) = log2(4) = 2
+	df.AddRow("gene1", []float64{0.0}) // log2(0+1) = log2(1) = 0
+	df.AddRow("gene2", []float64{1.0}) // log2(1+1) = log2(2) = 1
+	df.AddRow("gene3", []float64{3.0}) // log2(3+1) = log2(4) = 2
 
 	normalized := df.Normalize()
 
@@ -174,6 +176,77 @@ func TestDataFrame_WriteTSV(t *testing.T) {
 	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
 		t.Fatal("output file does not exist")
 	}
+}
+
+func TestDataFrame_WriteTSVReportsFlushSyncAndCloseFailures(t *testing.T) {
+	dataFrame := NewDataFrame([]string{"Gene", "sample"})
+	dataFrame.AddRow("BRCA1", []float64{100})
+
+	destination := &failingSynchronizedWriteCloser{
+		writeError: errors.New("injected write failure"),
+		syncError:  errors.New("injected sync failure"),
+		closeError: errors.New("injected close failure"),
+	}
+
+	err := dataFrame.writeTSV(destination)
+	if err == nil {
+		t.Fatal("writeTSV should report injected writer failures")
+	}
+	for _, expectedMessage := range []string{
+		"flush TSV writer",
+		"injected write failure",
+		"sync output file",
+		"injected sync failure",
+		"close output file",
+		"injected close failure",
+	} {
+		if !strings.Contains(err.Error(), expectedMessage) {
+			t.Errorf("error = %q, want %q", err, expectedMessage)
+		}
+	}
+	if !destination.syncCalled {
+		t.Error("writeTSV did not call Sync after the write failure")
+	}
+	if !destination.closeCalled {
+		t.Error("writeTSV did not call Close after the write failure")
+	}
+}
+
+func TestDataFrame_WriteTSVReportsDevFullFailure(t *testing.T) {
+	if _, err := os.Stat("/dev/full"); err != nil {
+		t.Skip("/dev/full is not available")
+	}
+
+	dataFrame := NewDataFrame([]string{"Gene", "sample"})
+	dataFrame.AddRow("BRCA1", []float64{100})
+	if err := dataFrame.WriteTSV("/dev/full"); err == nil {
+		t.Fatal("WriteTSV(/dev/full) should report a persistence failure")
+	}
+}
+
+type failingSynchronizedWriteCloser struct {
+	writeError  error
+	syncError   error
+	closeError  error
+	syncCalled  bool
+	closeCalled bool
+}
+
+func (destination *failingSynchronizedWriteCloser) Write(data []byte) (int, error) {
+	if destination.writeError != nil {
+		return 0, destination.writeError
+	}
+	return len(data), nil
+}
+
+func (destination *failingSynchronizedWriteCloser) Sync() error {
+	destination.syncCalled = true
+	return destination.syncError
+}
+
+func (destination *failingSynchronizedWriteCloser) Close() error {
+	destination.closeCalled = true
+	return destination.closeError
 }
 
 func TestFormatFloat(t *testing.T) {

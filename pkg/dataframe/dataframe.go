@@ -2,7 +2,9 @@ package dataframe
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"sort"
@@ -128,37 +130,97 @@ func (df *DataFrame) Normalize() *DataFrame {
 	return result
 }
 
-// WriteTSV writes DataFrame to TSV file
-func (df *DataFrame) WriteTSV(filepath string) error {
-	file, err := os.Create(filepath)
+type synchronizedWriteCloser interface {
+	io.Writer
+	Sync() error
+	Close() error
+}
+
+// WriteTSV writes DataFrame to TSV file.
+func (dataFrame *DataFrame) WriteTSV(filePath string) error {
+	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer file.Close()
 
-	writer := csv.NewWriter(file)
-	writer.Comma = '\t'
-	defer writer.Flush()
-
-	// Write header
-	if err := writer.Write(df.Columns); err != nil {
-		return fmt.Errorf("failed to write header: %w", err)
+	if err := dataFrame.writeTSV(file); err != nil {
+		return fmt.Errorf("failed to persist TSV file: %w", err)
 	}
-
-	// Write data rows
-	for i := 0; i < df.NumRows; i++ {
-		row := make([]string, df.NumCols)
-		row[0] = df.RowLabels[i]
-		for j := 1; j < df.NumCols; j++ {
-			val := df.Data[i][j-1]
-			row[j] = formatFloat(val)
-		}
-		if err := writer.Write(row); err != nil {
-			return fmt.Errorf("failed to write row %d: %w", i, err)
-		}
-	}
-
 	return nil
+}
+
+func (dataFrame *DataFrame) writeTSV(destination synchronizedWriteCloser) (resultError error) {
+	closed := false
+	defer func() {
+		if closed {
+			return
+		}
+		resultError = appendOperationError(resultError, "close output file", destination.Close())
+	}()
+
+	if err := dataFrame.validateShape(); err != nil {
+		resultError = appendOperationError(resultError, "validate dataframe", err)
+	} else {
+		writer := csv.NewWriter(destination)
+		writer.Comma = '\t'
+
+		if err := writer.Write(dataFrame.Columns); err != nil {
+			resultError = appendOperationError(resultError, "write header", err)
+		} else {
+			for rowIndex := 0; rowIndex < dataFrame.NumRows; rowIndex++ {
+				row := make([]string, dataFrame.NumCols)
+				row[0] = dataFrame.RowLabels[rowIndex]
+				for columnIndex := 1; columnIndex < dataFrame.NumCols; columnIndex++ {
+					value := dataFrame.Data[rowIndex][columnIndex-1]
+					row[columnIndex] = formatFloat(value)
+				}
+				if err := writer.Write(row); err != nil {
+					resultError = appendOperationError(resultError, fmt.Sprintf("write row %d", rowIndex), err)
+					break
+				}
+			}
+		}
+
+		writer.Flush()
+		resultError = appendOperationError(resultError, "flush TSV writer", writer.Error())
+	}
+
+	resultError = appendOperationError(resultError, "sync output file", destination.Sync())
+	resultError = appendOperationError(resultError, "close output file", destination.Close())
+	closed = true
+	return resultError
+}
+
+func (dataFrame *DataFrame) validateShape() error {
+	if dataFrame.NumCols != len(dataFrame.Columns) {
+		return fmt.Errorf("column count is %d but %d column names are present", dataFrame.NumCols, len(dataFrame.Columns))
+	}
+	if dataFrame.NumCols == 0 {
+		return fmt.Errorf("dataframe has no columns")
+	}
+	if dataFrame.NumRows != len(dataFrame.RowLabels) || dataFrame.NumRows != len(dataFrame.Data) {
+		return fmt.Errorf(
+			"row count is %d but %d row labels and %d data rows are present",
+			dataFrame.NumRows,
+			len(dataFrame.RowLabels),
+			len(dataFrame.Data),
+		)
+	}
+
+	expectedValueCount := dataFrame.NumCols - 1
+	for rowIndex, values := range dataFrame.Data {
+		if len(values) != expectedValueCount {
+			return fmt.Errorf("row %d has %d values, expected %d", rowIndex, len(values), expectedValueCount)
+		}
+	}
+	return nil
+}
+
+func appendOperationError(existingError error, operation string, operationError error) error {
+	if operationError == nil {
+		return existingError
+	}
+	return errors.Join(existingError, fmt.Errorf("%s: %w", operation, operationError))
 }
 
 // formatFloat converts float64 to string, handling special values
